@@ -6,6 +6,7 @@ import { useCanvasElements } from "../hooks/useCanvasElements";
 import { useLatestReadings } from "../hooks/useLatestReadings";
 import { SENSOR_TYPES } from "../utils/heatmap";
 import { ICON_NAMES } from "../utils/icons";
+import { api } from "../api/client";
 import SensorSelector from "../components/digital-twin/SensorSelector";
 import CanvasToolbar from "../components/digital-twin/CanvasToolbar";
 import CanvasManager from "../components/digital-twin/CanvasManager";
@@ -15,8 +16,8 @@ import HeatmapSettings from "../components/digital-twin/HeatmapSettings";
 import NodeFormModal from "../components/NodeFormModal";
 
 export default function DigitalTwinPage() {
-  const { nodes, update: updateNode, create: createNode, remove: removeNode } = useNodes();
-  const { canvases, create: createCanvas, update: updateCanvas, remove: removeCanvas } = useCanvases();
+  const { nodes, update: updateNode, create: createNode, remove: removeNode, refetch: refetchNodes } = useNodes();
+  const { canvases, create: createCanvas, update: updateCanvas, remove: removeCanvas, refetch: refetchCanvases } = useCanvases();
   const { readings, refetch: refetchReadings } = useLatestReadings();
 
   const [activeCanvasId, setActiveCanvasId] = useState(null);
@@ -265,6 +266,41 @@ export default function DigitalTwinPage() {
     setNodeModalOpen(true);
   }, []);
 
+  // Export canvas as JSON file download
+  const handleExportCanvas = useCallback(async (canvasId) => {
+    try {
+      const res = await fetch(`/api/canvases/${canvasId}/export`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "canvas.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed: " + e.message);
+    }
+  }, []);
+
+  // Import canvas from JSON data
+  const handleImportCanvas = useCallback(async (data) => {
+    try {
+      const result = await api.post("/api/canvases/import", data);
+      await refetchCanvases();
+      await refetchNodes();
+      setActiveCanvasId(result.canvas.id);
+      const parts = [];
+      if (result.nodesMatched?.length) parts.push(`Nodes matched: ${result.nodesMatched.join(", ")}`);
+      if (result.nodesSkipped?.length) parts.push(`Nodes skipped (not found): ${result.nodesSkipped.join(", ")}`);
+      alert("Canvas imported successfully!" + (parts.length ? "\n\n" + parts.join("\n") : ""));
+    } catch (e) {
+      alert("Import failed: " + e.message);
+    }
+  }, [refetchCanvases, refetchNodes]);
+
   // After creating a node (with possible initial_reading), refetch readings for heatmap
   const handleNodeFormSubmit = useCallback(async (form) => {
     await createNode(form);
@@ -287,6 +323,8 @@ export default function DigitalTwinPage() {
             onCreate={createCanvas}
             onUpdate={updateCanvas}
             onDelete={removeCanvas}
+            onExport={handleExportCanvas}
+            onImport={handleImportCanvas}
           />
           <SensorSelector selected={sensorKey} onChange={setSensorKey} />
         </div>

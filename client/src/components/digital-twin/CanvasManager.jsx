@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { PlusIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useState, useRef } from "react";
+import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import CanvasFormModal from "./CanvasFormModal";
 
-export default function CanvasManager({ canvases, activeCanvasId, onSelect, onCreate, onUpdate, onDelete }) {
+export default function CanvasManager({ canvases, activeCanvasId, onSelect, onCreate, onUpdate, onDelete, onExport, onImport }) {
   const [showForm, setShowForm] = useState(false);
   const [editCanvas, setEditCanvas] = useState(null);
+  const fileInputRef = useRef(null);
 
   const activeCanvas = canvases.find((c) => c.id === activeCanvasId);
 
@@ -57,6 +58,13 @@ export default function CanvasManager({ canvases, activeCanvasId, onSelect, onCr
             >
               <PencilSquareIcon className="h-4 w-4" />
             </button>
+            <button
+              onClick={() => onExport?.(activeCanvas.id)}
+              title="Download Canvas"
+              className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+            </button>
             {canvases.length > 1 && (
               <button
                 onClick={handleDelete}
@@ -68,6 +76,35 @@ export default function CanvasManager({ canvases, activeCanvasId, onSelect, onCr
             )}
           </>
         )}
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          title="Upload Canvas"
+          className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <ArrowUpTrayIcon className="h-4 w-4" />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                const data = JSON.parse(reader.result);
+                onImport?.(data);
+              } catch {
+                alert("Invalid JSON file");
+              }
+            };
+            reader.readAsText(file);
+            e.target.value = "";
+          }}
+        />
       </div>
 
       <CanvasFormModal
